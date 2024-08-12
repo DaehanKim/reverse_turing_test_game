@@ -33,25 +33,31 @@ const Game = () => {
         currentTurn: 0,
         phase: 'questioning'
       });
-      setMessages([{ sender: 'System', text: "게임이 시작되었습니다. 목적은 게임 참여자들 중 인간을 찾아내는 것입니다. 질문과 대화를 주의깊게 보고 누가 인간인지 찾아보세요." }]);
+      // 시스템 메시지 설정 API 호출
+      let systemMessage = "게임이 시작되었습니다. AI의 목적은 게임 참여자들 중 인간을 찾아내는 것입니다. 당신은 인간임을 들키지 않도록 적절한 질문과 대답을 해야 합니다.";
+      await axios.post('http://localhost:5000/api/set_system_message', { message: systemMessage });
+      
+      setMessages([{ sender: 'System', text: systemMessage}]);
     } catch (error) {
       console.error('Error starting game:', error);
       setMessages(prevMessages => [...prevMessages, { sender: 'System', text: "게임 시작 중 오류가 발생했습니다." }]);
     }
   };
-
+  
   const handleAITurn = async () => {
     try {
-      const response = await axios.post('http://localhost:5000/api/send_message', { message: "AI 자동 메시지" });
+      const response = await axios.post('http://localhost:5000/api/send_message', {});
       setMessages(prev => [...prev, { sender: gameState.agents[gameState.currentTurn], text: response.data.message }]);
       setGameState(prevState => ({
         ...prevState,
         currentTurn: (prevState.currentTurn + 1) % prevState.agents.length,
         phase: response.data.phase
       }));
-
+      
       if (response.data.phase === 'voting') {
-        setMessages(prev => [...prev, { sender: 'System', text: "모든 에이전트가 질문을 마쳤습니다. 이제 각 에이전트가 투표하고 이유를 설명할 차례입니다." }]);
+        let systemMessage = "모든 에이전트가 질문을 마쳤습니다. 이제 각 에이전트가 투표하고 이유를 설명할 차례입니다.";
+        await axios.post('http://localhost:5000/api/set_system_message', { message: systemMessage });
+        setMessages(prev => [...prev, { sender: 'System', text: systemMessage}]);
       }
     } catch (error) {
       console.error('Error in AI turn:', error);
@@ -74,7 +80,9 @@ const Game = () => {
       }));
 
       if (response.data.phase === 'voting') {
-        setMessages(prev => [...prev, { sender: 'System', text: "모든 에이전트가 질문을 마쳤습니다. 이제 각 에이전트가 투표하고 이유를 설명할 차례입니다." }]);
+        let systemMessage = "모든 에이전트가 질문을 마쳤습니다. 이제 각 에이전트가 투표하고 이유를 설명할 차례입니다.";
+        await axios.post('http://localhost:5000/api/set_system_message', { message: systemMessage });
+        setMessages(prev => [...prev, { sender: 'System', text: systemMessage }]);
       }
     } catch (error) {
       console.error('Error sending message:', error);
