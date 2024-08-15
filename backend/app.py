@@ -18,7 +18,10 @@ game_state = {
 def start_game():
     try:
         random_year = random.randint(0, 1900)
-        names = historical_figures(4, random_year).name
+        figures = historical_figures(4, random_year)
+        names = figures.name
+        print(figures.descriptions)
+        descriptions = {k:v for k,v in zip(names, figures.descriptions)}
         game_state['agents'] = names[:3]  # 3명의 역사적 인물 생성
         game_state['agents'].append(names[3])  # 사용자를 에이전트 목록에 추가
         game_state['current_turn'] = 0
@@ -29,7 +32,7 @@ def start_game():
         game_state['finished_questioning'] = [False] * 4
         game_state['finished_voting'] = [False] * 4
         game_state['vote_history'] = []
-        return jsonify({"message": "Game started", "agents": game_state['agents']})
+        return jsonify({"message": "Game started", "agents": game_state['agents'], "agent_descriptions" : descriptions})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -55,14 +58,17 @@ def send_message():
         current_turn = game_state['current_turn']
         current_agent = game_state['agents'][current_turn]
         next_turn = (current_turn + 1) % len(game_state['agents']) 
+        prev_turn = (current_turn + 3) % len(game_state['agents']) 
         next_agent = game_state['agents'][next_turn]
+        prev_agent = game_state['agents'][prev_turn]
         is_ai = game_state['is_ai'][game_state['current_turn']]
 
 
         # questioning & answering 번갈아가면서 진행        
         resp_fn = question if game_state['phase'] == 'questioning' else answer
+        target = next_agent if game_state['phase'] == 'questioning' else prev_agent
         if is_ai:
-            ai_response = resp_fn(current_agent, next_agent, game_state['chat_history'])
+            ai_response = resp_fn(current_agent, target, game_state['chat_history'])
             game_state['chat_history'].append(f"{current_agent}: {ai_response}")
             message = ai_response
         else:
@@ -118,17 +124,26 @@ def do_vote():
 
         # 모든 에이전트가 투표를 마치면 게임 종료
         if all(game_state['finished_voting']):
-            # vote 결과 집계
-            vote_result = get_vote_results(game_state['vote_history'])
-            game_state['phase'] = 'not_started'  # 게임 종료 후 상태 초기화
-            return jsonify({
-                "current_agent": current_agent,
-                "phase": "voting",
-                "vote_result" : vote_result.most_picked,
-                "vote_stat" : vote_result.stat,
-                "message": vote_response,
-                "turn" : game_state['current_turn']
-            })
+            print("## came here")
+            try:
+                vote_result = get_vote_results(game_state['vote_history'], game_state['agents'])
+                print(f"Vote result: {vote_result}")  # 로그 추가
+
+                most_picked = vote_result.top_voter
+                # names = vote_result.top_voter
+                # names.sort(key = lambda x:-dict(zip(vote_result.names,vote_result.scores))[x])
+                # most_picked = names[0]
+
+                return jsonify({
+                    "current_agent": current_agent,
+                    "phase": "voting",
+                    "vote_result": str(most_picked),  
+                    "message": str(vote_response),
+                    "turn": game_state['current_turn']
+                })
+            except Exception as e:
+                print(f"Error in vote result processing: {str(e)}")  # 로그 추가
+                return jsonify({"error": f"Error in vote result processing: {str(e)}"}), 500
 
         return jsonify({
             "message": vote_response,
