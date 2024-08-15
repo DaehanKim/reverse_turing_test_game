@@ -20,7 +20,7 @@ function App() {
         fontFamily: "'Noto Sans KR', sans-serif",
         fontWeight: '700',
         textShadow: '2px 2px 4px rgba(0,0,0,0.1)'
-      }}>역사 인물 역 튜링 테스트 게임</h1>
+      }}>Who's Human?</h1>
       <Game />
     </div>
   );

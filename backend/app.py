@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from utils import chat, historical_figures, vote, get_vote_results
+from utils import question, answer, historical_figures, vote, get_vote_results
+import random
 
 app = Flask(__name__)
 CORS(app)
@@ -10,19 +11,24 @@ game_state = {
     'agents': [],
     'current_turn': 0,
     'chat_history': [],
-    'phase': 'not_started',  # 'not_started', 'questioning' or 'voting'
+    'phase': 'not_started',  # 'not_started', 'questioning', 'answering' or 'voting'
 }
 
 @app.route('/api/start_game', methods=['POST'])
 def start_game():
     try:
-        names = historical_figures(4).name
+        random_year = random.randint(0, 1900)
+        names = historical_figures(4, random_year).name
         game_state['agents'] = names[:3]  # 3명의 역사적 인물 생성
         game_state['agents'].append(names[3])  # 사용자를 에이전트 목록에 추가
         game_state['current_turn'] = 0
         game_state['chat_history'] = []
         game_state['is_ai'] = [True, True, True, False]
         game_state['phase'] = 'questioning'
+        game_state['finished_answering'] = [False] * 4
+        game_state['finished_questioning'] = [False] * 4
+        game_state['finished_voting'] = [False] * 4
+        game_state['vote_history'] = []
         return jsonify({"message": "Game started", "agents": game_state['agents']})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -46,12 +52,17 @@ def send_message():
     try:
         data = request.json
         user_message = data.get("user_message", None)
-        current_agent = game_state['agents'][game_state['current_turn']]
+        current_turn = game_state['current_turn']
+        current_agent = game_state['agents'][current_turn]
+        next_turn = (current_turn + 1) % len(game_state['agents']) 
+        next_agent = game_state['agents'][next_turn]
         is_ai = game_state['is_ai'][game_state['current_turn']]
 
-        # AI 응답 생성 (다음 에이전트가 User가 아닌 경우에만)
+
+        # questioning & answering 번갈아가면서 진행        
+        resp_fn = question if game_state['phase'] == 'questioning' else answer
         if is_ai:
-            ai_response = chat(current_agent, game_state['chat_history'])
+            ai_response = resp_fn(current_agent, next_agent, game_state['chat_history'])
             game_state['chat_history'].append(f"{current_agent}: {ai_response}")
             message = ai_response
         else:
@@ -60,59 +71,70 @@ def send_message():
 
         print(f"turn {game_state['current_turn']} : {message}")
 
-        # 다음 턴으로 이동
-        game_state['current_turn'] = (game_state['current_turn'] + 1) % len(game_state['agents'])
-
-        # 모든 에이전트가 질문을 마치면 투표 단계로 전환
-        if game_state['current_turn'] == 0 and game_state['phase'] == 'questioning':
+        # answering까지 마쳤으면 다음 턴으로 이동
+        # 그렇지 않으면 turn은 그대로 두고 phase만 변경. question -> answer
+        if game_state['phase'] == "questioning":
+            game_state['finished_questioning'][current_turn] = True
+            game_state['current_turn'] = next_turn
+        if game_state['phase'] == "answering":
+            game_state['finished_answering'][current_turn] = True
+        game_state['phase'] = "questioning" if game_state['phase'] == 'answering' else "answering"
+            
+        # 모든 에이전트가 질문과 답변을 마치면 투표 단계로 전환
+        if all(game_state['finished_answering']) and all(game_state['finished_questioning']):
             game_state['phase'] = 'voting'
-            return jsonify({
-                "message" : message,
-                "phase": "voting",
-                "current_agent": current_agent
-            })
 
         return jsonify({
             "message" : message,
-            "current_agent": current_agent, 
-            "phase": game_state['phase']
+            "current_agent": current_agent,
+            "turn" : game_state['current_turn'],
+            "phase": game_state['phase'],
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/vote', methods=['POST'])
-def vote():
+def do_vote():
     if game_state['phase'] != 'voting':
         return jsonify({"error": "Voting phase has not started yet"}), 400
     
     try:
         data = request.json
-        current_agent = game_state['agents'][game_state['current_turn']]
+        user_message = data.get('user_message', None)
+        current_turn = game_state['current_turn']
+        current_agent = game_state['agents'][current_turn]
+        is_ai = game_state['is_ai'][current_turn]
+        
+        if is_ai:
+            vote_response = vote(current_agent, game_state['chat_history'])
+        else:
+            vote_response = user_message
 
-        vote_response = vote(current_agent, game_state['chat_history'])
         game_state['vote_history'].append(f"{current_agent}: {vote_response}")
-
+        game_state['finished_voting'][current_turn] = True
 
         # 다음 에이전트로 이동
-        game_state['current_turn'] = (game_state['current_turn'] + 1) % len(game_state['agents'])
+        game_state['current_turn'] = (current_turn + 1) % len(game_state['agents'])
 
         # 모든 에이전트가 투표를 마치면 게임 종료
-        if game_state['current_turn'] == 0:
+        if all(game_state['finished_voting']):
             # vote 결과 집계
             vote_result = get_vote_results(game_state['vote_history'])
             game_state['phase'] = 'not_started'  # 게임 종료 후 상태 초기화
             return jsonify({
+                "current_agent": current_agent,
+                "phase": "voting",
                 "vote_result" : vote_result.most_picked,
                 "vote_stat" : vote_result.stat,
                 "message": vote_response,
-                "game_over": True,
-                "chat_history": game_state['chat_history']
+                "turn" : game_state['current_turn']
             })
 
         return jsonify({
             "message": vote_response,
             "current_agent": current_agent,
-            "phase": "voting"
+            "phase": "voting",
+            "turn" : game_state['current_turn']
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
