@@ -2,3 +2,4 @@ node_modules
 keys
 **/__pycache__
 .vscode
+ngrok.exe
