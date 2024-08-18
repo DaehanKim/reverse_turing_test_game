@@ -120,39 +120,36 @@ def do_vote():
         game_state['finished_voting'][current_turn] = True
 
         # 다음 에이전트로 이동
-        game_state['current_turn'] = (current_turn + 1) % len(game_state['agents'])
-
-        # 모든 에이전트가 투표를 마치면 게임 종료
-        if all(game_state['finished_voting']):
-            print("## came here")
-            try:
-                vote_result = get_vote_results(game_state['vote_history'], game_state['agents'])
-                print(f"Vote result: {vote_result}")  # 로그 추가
-
-                most_picked = vote_result.top_voter
-                # names = vote_result.top_voter
-                # names.sort(key = lambda x:-dict(zip(vote_result.names,vote_result.scores))[x])
-                # most_picked = names[0]
-
-                return jsonify({
-                    "current_agent": current_agent,
-                    "phase": "voting",
-                    "vote_result": str(most_picked),  
-                    "message": str(vote_response),
-                    "turn": game_state['current_turn']
-                })
-            except Exception as e:
-                print(f"Error in vote result processing: {str(e)}")  # 로그 추가
-                return jsonify({"error": f"Error in vote result processing: {str(e)}"}), 500
+        game_state['current_turn'] = (current_turn + 1) % len(game_state['agents'])      
 
         return jsonify({
             "message": vote_response,
             "current_agent": current_agent,
             "phase": "voting",
-            "turn" : game_state['current_turn']
+            "turn" : game_state['current_turn'],
+            "finished_voting" : all(game_state['finished_voting'])
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+@app.route('/api/vote_result', methods=['POST'])
+def get_vote_result():
+    try:
+        vote_result = get_vote_results(game_state['vote_history'], game_state['agents'])
+        print(f"Vote result: {vote_result}")  # 로그 추가
+
+        most_picked = vote_result.top_voter
+        # names = vote_result.top_voter
+        # names.sort(key = lambda x:-dict(zip(vote_result.names,vote_result.scores))[x])
+        # most_picked = names[0]
+
+        return jsonify({
+            "vote_result": str(most_picked),  
+            "why": str(vote_result.why),  
+        })
+    except Exception as e:
+        print(f"Error in vote result processing: {str(e)}")  # 로그 추가
+        return jsonify({"error": f"Error in vote result processing: {str(e)}"}), 500
 
 @app.route('/')
 def home():

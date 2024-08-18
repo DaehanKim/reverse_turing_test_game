@@ -10,8 +10,9 @@ HINTS = ["if someone is wrong in historical knowledge, suspect him to be human."
          "if someone makes typos, suspect him to be human.", 
          "if someone asks irrelevant questions, suspect him to be human.", 
          "if someone answers in an irrelevant way, suspect him to be human.", 
-         "if someone makes explicit comments, suspect him to be human.", 
-         "if someone writes loose free-form answer rather than logics and structures, suspect him to be human."]
+         "if someone makes explicit or rude comments, suspect him to be human.", 
+         "if someone writes loose free-form answer rather than logics and structures, suspect him to be human.",
+         "If someone is not responding, that's definitely human. cuz' no AI doing that."]
 client = OpenAI(api_key=YOUR_API_KEY)
 
 class Figure(BaseModel):
@@ -20,6 +21,7 @@ class Figure(BaseModel):
 
 class VoteResult(BaseModel):
     top_voter : str
+    why : str
     # oneline_explaination: List[str]
 
 def historical_figures(n=3, era=1000):
@@ -37,8 +39,8 @@ def get_vote_results(vote_history, candidates):
     completion = client.beta.chat.completions.parse(
     model="gpt-4o-2024-08-06",
     messages=[
-        {"role": "system", "content": f"Given vote logs, count votes of each vote logs. each one can vote for only one. finally give us who got most votes. if there are multiple top voters, pick anyone from them. think step-by-step. "},
-        {"role": "system", "content": f"vote logs : {vote_history}"},
+        {"role": "system", "content": f"Given vote conversation, provide who got most votes. if there are multiple top voters, pick more suspicious one by your judgement. think step-by-step and briefly and provide why in Korean."},
+        {"role": "system", "content": f"conversations : {vote_history}"},
     ],
     response_format=VoteResult,
     )
@@ -79,7 +81,7 @@ def answer(figure_name, target, chat_history):
     return completion.choices[0].message.content
 
 def vote(figure_name, chat_history):
-    picked_hint = np.random.choice(HINTS, size=3, replace=False)
+    picked_hint = np.random.choice(HINTS, size=4, replace=False)
     hint = [{"role" : "system", "content" : f"HINT : {hint}"} for hint in picked_hint]
     
     messages = [
