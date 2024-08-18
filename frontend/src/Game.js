@@ -13,6 +13,7 @@ const Game = () => {
   });
   const [isLoading, setIsLoading] = useState(false);
   const [gameEnded, setGameEnded] = useState(false);
+  const [votingEnded, setVotingEnded] = useState(false);
   const messagesEndRef = useRef(null);
   const prevPhaseRef = useRef('not_started');
   const [timeLeft, setTimeLeft] = useState(50);
@@ -246,6 +247,7 @@ const getMessageStyle = (sender) => {
         let response;
         if (gameState.phase === 'voting') {
             response = await axios.post('/api/vote', { user_message: finalMessage });
+            setVotingEnded(true);
         } else if (gameState.phase === 'answering') {
             response = await axios.post('/api/send_message', { user_message: finalMessage });
         } else if (gameState.phase === 'questioning') {
@@ -254,7 +256,8 @@ const getMessageStyle = (sender) => {
             console.error('Unexpected game phase:', gameState.phase);
             return;
         }
-
+        
+        
         if (response.data.finished_voting == true) {
           response = await axios.post('/api/vote_result', {});
           let judgeMessage = `투표 결과를 발표하겠습니다. ${response.data.vote_result}가 인간입니다. ${response.data.why || '이유가 제공되지 않았습니다.'}`;
@@ -273,12 +276,10 @@ const getMessageStyle = (sender) => {
           currentTurn: response.data.turn,
           phase: response.data.phase
         }));
-
-
-        if (response.data.turn === gameState.agents.length - 1) {
-            startTimer();
-        }
-
+        
+        if (response.data.turn === gameState.agents.length - 1 && !votingEnded) {
+          startTimer();
+      }
     } catch (error) {
         console.error('Error sending message:', error);
         setMessages(prev => [...prev, { sender: 'System', text: "메시지 전송 중 오류가 발생했습니다." }]);
@@ -395,7 +396,7 @@ const getMessageStyle = (sender) => {
 )}
   <div ref={messagesEndRef} />
 </div>
-    {!gameEnded && gameState.phase !== 'not_started' && gameState.agents[gameState.currentTurn] === gameState.agents.at(-1) && (
+    {!gameEnded && !votingEnded && gameState.phase !== 'not_started' && gameState.agents[gameState.currentTurn] === gameState.agents.at(-1) && (
       <div className="input-area" style={{ 
         display: 'flex', 
         padding: '20px',
@@ -442,7 +443,7 @@ const getMessageStyle = (sender) => {
         </button>
       </div>
     )}
-      {!gameEnded && gameState.phase !== 'not_started' && gameState.agents[gameState.currentTurn] === gameState.agents.at(-1) && (
+      {!gameEnded && !votingEnded && gameState.phase !== 'not_started' && gameState.agents[gameState.currentTurn] === gameState.agents.at(-1) && (
         <>
           <div className="time-bar" style={{
             width: '100%',
